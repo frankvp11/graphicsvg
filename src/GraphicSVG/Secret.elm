@@ -1,5 +1,5 @@
 module GraphicSVG.Secret exposing 
-    (Stencil(..), Shape(..), Color(..), Gradient(..), Stop(..), Transform, LineType(..), FontAlign(..), Face(..), Font(..), Pull(..))
+    (Stencil(..), Shape(..), Color(..), Gradient(..), Stop(..), Transform, LineType(..), FontAlign(..), Face(..), Font(..), Pull(..), getBoundingBox)
 
 {-| Advanced Secret module! This is for people who want to access the
 underlying types in the library so you can do advanced things. Most people
@@ -190,3 +190,263 @@ curve segments.
 -}
 type Pull
     = Pull ( Float, Float ) ( Float, Float )
+
+
+type alias BoundingBox =
+    { minX : Float
+    , minY : Float
+    , maxX : Float
+    , maxY : Float
+    }
+
+-- Compute the bounding box of a shape
+getBoundingBox : Shape userMsg -> BoundingBox
+getBoundingBox shape =
+    case shape of
+        Inked _ _ stencil ->
+            stencilBoundingBox stencil
+
+        ForeignObject w h _ ->
+            { minX = -w / 2, minY = -h / 2, maxX = w / 2, maxY = h / 2 }
+
+        Move (dx, dy) sh ->
+            let
+                box = getBoundingBox sh
+            in
+            { minX = box.minX + dx
+            , minY = box.minY + dy
+            , maxX = box.maxX + dx
+            , maxY = box.maxY + dy
+            }
+
+        Rotate angle sh ->
+            let
+                box = getBoundingBox sh
+                corners = [ (box.minX, box.minY), (box.minX, box.maxY), (box.maxX, box.minY), (box.maxX, box.maxY) ]
+                rotated = List.map (rotatePoint angle) corners
+                xs = List.map Tuple.first rotated
+                ys = List.map Tuple.second rotated
+            in
+            { minX = List.minimum xs |> Maybe.withDefault 0
+            , minY = List.minimum ys |> Maybe.withDefault 0
+            , maxX = List.maximum xs |> Maybe.withDefault 0
+            , maxY = List.maximum ys |> Maybe.withDefault 0
+            }
+
+        Scale sx sy sh ->
+            let
+                box = getBoundingBox sh
+            in
+            { minX = box.minX * sx
+            , minY = box.minY * sy
+            , maxX = box.maxX * sx
+            , maxY = box.maxY * sy
+            }
+
+        Skew skx sky sh ->
+            let
+                box = getBoundingBox sh
+                corners = [ (box.minX, box.minY), (box.minX, box.maxY), (box.maxX, box.minY), (box.maxX, box.maxY) ]
+                skewed = List.map (skewPoint skx sky) corners
+                xs = List.map Tuple.first skewed
+                ys = List.map Tuple.second skewed
+            in
+            { minX = List.minimum xs |> Maybe.withDefault 0
+            , minY = List.minimum ys |> Maybe.withDefault 0
+            , maxX = List.maximum xs |> Maybe.withDefault 0
+            , maxY = List.maximum ys |> Maybe.withDefault 0
+            }
+
+        Transformed ( (a, c, e), (b, d, f) ) sh ->
+            let
+                box = getBoundingBox sh
+                corners = [ (box.minX, box.minY), (box.minX, box.maxY), (box.maxX, box.minY), (box.maxX, box.maxY) ]
+                transformed = List.map (\(x, y) -> (a * x + c * y + e, b * x + d * y + f)) corners
+                xs = List.map Tuple.first transformed
+                ys = List.map Tuple.second transformed
+            in
+            { minX = List.minimum xs |> Maybe.withDefault 0
+            , minY = List.minimum ys |> Maybe.withDefault 0
+            , maxX = List.maximum xs |> Maybe.withDefault 0
+            , maxY = List.maximum ys |> Maybe.withDefault 0
+            }
+
+        Group shapes ->
+            case shapes of
+                [] ->
+                    { minX = 0, minY = 0, maxX = 0, maxY = 0 }
+                _ ->
+                    let
+                        boxes = List.map getBoundingBox shapes
+                        minXs = List.map .minX boxes
+                        minYs = List.map .minY boxes
+                        maxXs = List.map .maxX boxes
+                        maxYs = List.map .maxY boxes
+                    in
+                    { minX = List.minimum minXs |> Maybe.withDefault 0
+                    , minY = List.minimum minYs |> Maybe.withDefault 0
+                    , maxX = List.maximum maxXs |> Maybe.withDefault 0
+                    , maxY = List.maximum maxYs |> Maybe.withDefault 0
+                    }
+
+        GroupOutline sh ->
+            getBoundingBox sh
+
+        AlphaMask region sh ->
+            intersectBoundingBox (getBoundingBox region) (getBoundingBox sh)
+
+        Clip region sh ->
+            intersectBoundingBox (getBoundingBox region) (getBoundingBox sh)
+
+        Everything ->
+            { minX = -10000, minY = -10000, maxX = 10000, maxY = 10000 }
+
+        Notathing ->
+            { minX = 0, minY = 0, maxX = 0, maxY = 0 }
+
+        Link _ sh ->
+            getBoundingBox sh
+
+        Tap _ sh ->
+            getBoundingBox sh
+
+        TapAt _ sh ->
+            getBoundingBox sh
+
+        EnterShape _ sh ->
+            getBoundingBox sh
+
+        EnterAt _ sh ->
+            getBoundingBox sh
+
+        Exit _ sh ->
+            getBoundingBox sh
+
+        ExitAt _ sh ->
+            getBoundingBox sh
+
+        MouseDown _ sh ->
+            getBoundingBox sh
+
+        MouseDownAt _ sh ->
+            getBoundingBox sh
+
+        MouseUp _ sh ->
+            getBoundingBox sh
+
+        MouseUpAt _ sh ->
+            getBoundingBox sh
+
+        MoveOverAt _ sh ->
+            getBoundingBox sh
+
+        TouchStart _ sh ->
+            getBoundingBox sh
+
+        TouchEnd _ sh ->
+            getBoundingBox sh
+
+        TouchStartAt _ sh ->
+            getBoundingBox sh
+
+        TouchEndAt _ sh ->
+            getBoundingBox sh
+
+        TouchMoveAt _ sh ->
+            getBoundingBox sh
+
+        GraphPaper _ _ _ ->
+            { minX = -10000, minY = -10000, maxX = 10000, maxY = 10000 }
+
+-- Compute the bounding box of a stencil
+stencilBoundingBox : Stencil -> BoundingBox
+stencilBoundingBox stencil =
+    case stencil of
+        Circle r ->
+            { minX = -r, minY = -r, maxX = r, maxY = r }
+
+        Rect w h ->
+            { minX = -w / 2, minY = -h / 2, maxX = w / 2, maxY = h / 2 }
+
+        RoundRect w h _ ->
+            { minX = -w / 2, minY = -h / 2, maxX = w / 2, maxY = h / 2 }
+
+        Oval w h ->
+            { minX = -w / 2, minY = -h / 2, maxX = w / 2, maxY = h / 2 }
+
+        Polygon points ->
+            pointsBoundingBox points
+
+        Path points ->
+            pointsBoundingBox points
+
+        BezierPath start points ->
+            let
+                allPoints = start :: List.concatMap (\(p1, p2) -> [p1, p2]) points
+            in
+            pointsBoundingBox allPoints
+
+
+        Text (Face size bold italic _ _ _ font align) str ->
+            let
+                -- Base width estimate: adjust for font type
+                charWidthFactor =
+                    case font of
+                        Serif -> 0.65
+                        Sansserif -> 0.6
+                        FixedWidth -> 0.7
+                        Custom "Arial" -> 0.55 
+                        Custom _ -> 0.6 -- Default for other custom fonts
+
+                charWidth = size * charWidthFactor
+                width = toFloat (String.length str) * charWidth
+                height = size * 1.2 
+                -- Adjust x bounds based on textAnchor (FontAlign)
+                (xMin, xMax) = (-width / 2, width / 2)
+            in
+            { minX = xMin
+            , minY = -height / 2
+            , maxX = xMax
+            , maxY = height / 2
+            }
+
+
+-- Compute bounding box for a list of points
+pointsBoundingBox : List (Float, Float) -> BoundingBox
+pointsBoundingBox points =
+    case points of
+        [] ->
+            { minX = 0, minY = 0, maxX = 0, maxY = 0 }
+        _ ->
+            let
+                xs = List.map Tuple.first points
+                ys = List.map Tuple.second points
+            in
+            { minX = List.minimum xs |> Maybe.withDefault 0
+            , minY = List.minimum ys |> Maybe.withDefault 0
+            , maxX = List.maximum xs |> Maybe.withDefault 0
+            , maxY = List.maximum ys |> Maybe.withDefault 0
+            }
+
+-- Rotate a point around (0, 0)
+rotatePoint : Float -> (Float, Float) -> (Float, Float)
+rotatePoint angle (x, y) =
+    let
+        cosA = cos angle
+        sinA = sin angle
+    in
+    (x * cosA - y * sinA, x * sinA + y * cosA)
+
+-- Skew a point
+skewPoint : Float -> Float -> (Float, Float) -> (Float, Float)
+skewPoint skx sky (x, y) =
+    (x + y * tan skx, x * tan sky + y)
+
+-- Intersect two bounding boxes
+intersectBoundingBox : BoundingBox -> BoundingBox -> BoundingBox
+intersectBoundingBox box1 box2 =
+    { minX = max box1.minX box2.minX
+    , minY = max box1.minY box2.minY
+    , maxX = min box1.maxX box2.maxX
+    , maxY = min box1.maxY box2.maxY
+    }
