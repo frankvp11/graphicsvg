@@ -3,7 +3,6 @@ module Tests.BoundingBoxTest exposing (..)
 import GraphicSVG exposing (..)
 import GraphicSVG.App exposing (..)
 import GraphicSVG.Secret exposing (getBoundingBox)
-import GraphicSVG.Secret exposing (FontAlign(..))
 
 -- Model includes the currently selected test case
 type alias Model =
