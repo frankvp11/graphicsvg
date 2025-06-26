@@ -199,77 +199,106 @@ type alias BoundingBox =
     , maxY : Float
     }
 
--- Compute the bounding box of a shape
+
+ident : Transform
+ident =
+    ( ( 1, 0, 0 )
+    , ( 0, 1, 0 )
+    )
+
+moveT : ( Float, Float ) -> Transform -> Transform
+moveT ( u, v ) ( ( a, c, tx ), ( b, d, ty ) ) =
+    ( ( a, c, tx + a * u + c * v )
+    , ( b, d, ty + b * u + d * v )
+    )
+
+rotateT : Float -> Transform -> Transform
+rotateT rad ( ( a, c, tx ), ( b, d, ty ) ) =
+    let
+        sinX =
+            sin rad
+
+        cosX =
+            cos rad
+    in
+    ( ( a * cosX + c * sinX, c * cosX - a * sinX, tx )
+    , ( b * cosX + d * sinX, d * cosX - b * sinX, ty )
+    )
+
+
+scaleT : Float -> Float -> Transform -> Transform
+scaleT sx sy ( ( a, c, tx ), ( b, d, ty ) ) =
+    ( ( a * sx, c * sy, tx )
+    , ( b * sx, d * sy, ty )
+    )
+
+
+skewT : Float -> Float -> Transform -> Transform
+skewT skx sky ( ( a, c, tx ), ( b, d, ty ) ) =
+    let
+        tanX =
+            tan -skx
+
+        tanY =
+            tan -sky
+    in
+    ( ( a + c * tanY, c + a * tanX, tx )
+    , ( b + d * tanY, d + b * tanX, ty )
+    )
+
+
+rotateAboutT : ( Float, Float ) -> Float -> Transform -> Transform
+rotateAboutT ( u, v ) rad ( ( a, c, tx ), ( b, d, ty ) ) =
+    let
+        sinX =
+            sin rad
+
+        cosX =
+            cos rad
+    in
+    ( ( a * cosX + c * sinX, c * cosX - a * sinX, tx + a * u + c * v - v * (c * cosX - a * sinX) - u * (a * cosX + c * sinX) )
+    , ( b * cosX + d * sinX, d * cosX - b * sinX, ty + b * u + d * v - v * (d * cosX - b * sinX) - u * (b * cosX + d * sinX) )
+    )
+
+
+
+-- Matrix multiplication for transformations
+matrixMult : Transform -> Transform -> Transform
+matrixMult ( ( a, c, e ), ( b, d, f ) ) ( ( a1, c1, e1 ), ( b1, d1, f1 ) ) =
+    ( ( a * a1 + c * b1, a * c1 + c * d1, e + a * e1 + c * f1 )
+    , ( b * a1 + d * b1, b * c1 + d * d1, f + b * e1 + d * f1 )
+    )
+
+-- Compute the bounding box of a shape with an accumulated transformation
 getBoundingBox : Shape userMsg -> BoundingBox
 getBoundingBox shape =
+    getBoundingBoxWithTransform shape ident
+
+-- Helper function to compute bounding box with an accumulated transformation matrix
+getBoundingBoxWithTransform : Shape userMsg -> Transform -> BoundingBox
+getBoundingBoxWithTransform shape trans =
     case shape of
         Inked _ _ stencil ->
-            stencilBoundingBox stencil
+            stencilBoundingBox stencil |> applyTransform trans
 
         ForeignObject w h _ ->
             { minX = -w / 2, minY = -h / 2, maxX = w / 2, maxY = h / 2 }
+                |> applyTransform trans
 
         Move (dx, dy) sh ->
-            let
-                box = getBoundingBox sh
-            in
-            { minX = box.minX + dx
-            , minY = box.minY + dy
-            , maxX = box.maxX + dx
-            , maxY = box.maxY + dy
-            }
+            getBoundingBoxWithTransform sh (moveT (dx, dy) trans)
 
         Rotate angle sh ->
-            let
-                box = getBoundingBox sh
-                corners = [ (box.minX, box.minY), (box.minX, box.maxY), (box.maxX, box.minY), (box.maxX, box.maxY) ]
-                rotated = List.map (rotatePoint angle) corners
-                xs = List.map Tuple.first rotated
-                ys = List.map Tuple.second rotated
-            in
-            { minX = List.minimum xs |> Maybe.withDefault 0
-            , minY = List.minimum ys |> Maybe.withDefault 0
-            , maxX = List.maximum xs |> Maybe.withDefault 0
-            , maxY = List.maximum ys |> Maybe.withDefault 0
-            }
+            getBoundingBoxWithTransform sh (rotateT angle trans)
 
         Scale sx sy sh ->
-            let
-                box = getBoundingBox sh
-            in
-            { minX = box.minX * sx
-            , minY = box.minY * sy
-            , maxX = box.maxX * sx
-            , maxY = box.maxY * sy
-            }
+            getBoundingBoxWithTransform sh (scaleT sx sy trans)
 
         Skew skx sky sh ->
-            let
-                box = getBoundingBox sh
-                corners = [ (box.minX, box.minY), (box.minX, box.maxY), (box.maxX, box.minY), (box.maxX, box.maxY) ]
-                skewed = List.map (skewPoint skx sky) corners
-                xs = List.map Tuple.first skewed
-                ys = List.map Tuple.second skewed
-            in
-            { minX = List.minimum xs |> Maybe.withDefault 0
-            , minY = List.minimum ys |> Maybe.withDefault 0
-            , maxX = List.maximum xs |> Maybe.withDefault 0
-            , maxY = List.maximum ys |> Maybe.withDefault 0
-            }
+            getBoundingBoxWithTransform sh (skewT skx sky trans)
 
-        Transformed ( (a, c, e), (b, d, f) ) sh ->
-            let
-                box = getBoundingBox sh
-                corners = [ (box.minX, box.minY), (box.minX, box.maxY), (box.maxX, box.minY), (box.maxX, box.maxY) ]
-                transformed = List.map (\(x, y) -> (a * x + c * y + e, b * x + d * y + f)) corners
-                xs = List.map Tuple.first transformed
-                ys = List.map Tuple.second transformed
-            in
-            { minX = List.minimum xs |> Maybe.withDefault 0
-            , minY = List.minimum ys |> Maybe.withDefault 0
-            , maxX = List.maximum xs |> Maybe.withDefault 0
-            , maxY = List.maximum ys |> Maybe.withDefault 0
-            }
+        Transformed tm sh ->
+            getBoundingBoxWithTransform sh (matrixMult trans tm)
 
         Group shapes ->
             case shapes of
@@ -277,7 +306,7 @@ getBoundingBox shape =
                     { minX = 0, minY = 0, maxX = 0, maxY = 0 }
                 _ ->
                     let
-                        boxes = List.map getBoundingBox shapes
+                        boxes = List.map (\sh -> getBoundingBoxWithTransform sh trans) shapes
                         minXs = List.map .minX boxes
                         minYs = List.map .minY boxes
                         maxXs = List.map .maxX boxes
@@ -290,13 +319,17 @@ getBoundingBox shape =
                     }
 
         GroupOutline sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         AlphaMask region sh ->
-            intersectBoundingBox (getBoundingBox region) (getBoundingBox sh)
+            intersectBoundingBox
+                (getBoundingBoxWithTransform region trans)
+                (getBoundingBoxWithTransform sh trans)
 
         Clip region sh ->
-            intersectBoundingBox (getBoundingBox region) (getBoundingBox sh)
+            intersectBoundingBox
+                (getBoundingBoxWithTransform region trans)
+                (getBoundingBoxWithTransform sh trans)
 
         Everything ->
             { minX = -10000, minY = -10000, maxX = 10000, maxY = 10000 }
@@ -305,58 +338,73 @@ getBoundingBox shape =
             { minX = 0, minY = 0, maxX = 0, maxY = 0 }
 
         Link _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         Tap _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         TapAt _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         EnterShape _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         EnterAt _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         Exit _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         ExitAt _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         MouseDown _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         MouseDownAt _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         MouseUp _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         MouseUpAt _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         MoveOverAt _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         TouchStart _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         TouchEnd _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         TouchStartAt _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         TouchEndAt _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         TouchMoveAt _ sh ->
-            getBoundingBox sh
+            getBoundingBoxWithTransform sh trans
 
         GraphPaper _ _ _ ->
             { minX = -10000, minY = -10000, maxX = 10000, maxY = 10000 }
+
+-- Apply a transformation matrix to a bounding box
+applyTransform : Transform -> BoundingBox -> BoundingBox
+applyTransform ( (a, c, e), (b, d, f) ) box =
+    let
+        corners = [ (box.minX, box.minY), (box.minX, box.maxY), (box.maxX, box.minY), (box.maxX, box.maxY) ]
+        transformed = List.map (\(x, y) -> (a * x + c * y + e, b * x + d * y + f)) corners
+        xs = List.map Tuple.first transformed
+        ys = List.map Tuple.second transformed
+    in
+    { minX = List.minimum xs |> Maybe.withDefault 0
+    , minY = List.minimum ys |> Maybe.withDefault 0
+    , maxX = List.maximum xs |> Maybe.withDefault 0
+    , maxY = List.maximum ys |> Maybe.withDefault 0
+    }
 
 -- Compute the bounding box of a stencil
 stencilBoundingBox : Stencil -> BoundingBox
@@ -400,16 +448,19 @@ stencilBoundingBox stencil =
 
                 charWidth = size * charWidthFactor
                 width = toFloat (String.length str) * charWidth
-                height = size * 1.2 
-                -- Adjust x bounds based on textAnchor (FontAlign)
-                (xMin, xMax) = (-width / 2, width / 2)
+                height = size * 1.2
+                -- Adjust x bounds based on text alignment
+                (xMin, xMax) =
+                    case align of
+                        AlignLeft -> (0, width)
+                        AlignCentred -> (-width / 2, width / 2)
+                        AlignRight -> (-width, 0)
             in
             { minX = xMin
             , minY = -height / 2
             , maxX = xMax
             , maxY = height / 2
             }
-
 
 -- Compute bounding box for a list of points
 pointsBoundingBox : List (Float, Float) -> BoundingBox
