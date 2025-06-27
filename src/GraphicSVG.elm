@@ -162,9 +162,6 @@ import Time exposing (..)
 import Tuple
 import Url exposing (Url)
 import Color
-import GraphicSVG.Secret 
-    exposing(getBoundingBox
-            )
 import GraphicSVG.Types exposing (Shape(..)
             , Stencil(..)
             , Color(..)
@@ -176,7 +173,8 @@ import GraphicSVG.Types exposing (Shape(..)
             , Pull(..)
             , Gradient(..)
             , Stop(..))
-import GraphicSVG.Math exposing (ident, moveT, rotateT, scaleT, skewT, rotateAboutT)
+import GraphicSVG.Transforms exposing (ident, moveT, rotateT, scaleT, skewT, rotateAboutT)
+import GraphicSVG.BoundingBox exposing (getBoundingBox)
 
 {-| A filled, outlined, or filled and outlined object that can be drawn to the screen using `collage`.
 -}

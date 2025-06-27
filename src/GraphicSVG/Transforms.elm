@@ -1,4 +1,4 @@
-module GraphicSVG.Math exposing (..)
+module GraphicSVG.Transforms exposing (..)
 import GraphicSVG.Types exposing (Transform)
 
 ident : Transform
