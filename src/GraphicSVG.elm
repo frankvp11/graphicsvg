@@ -283,22 +283,22 @@ map f sh =
             TouchMoveAt (f << msg) (map f shape)
 
         PtrStart msg shape ->
-            PtrStart ( msg >> f ) (map f shape)
+            PtrStart (msg >> f) (map f shape)
 
         PtrEnd msg shape ->
-            PtrEnd ( msg >> f ) (map f shape)
+            PtrEnd (msg >> f) (map f shape)
 
         PtrCancel msg shape ->
-            PtrCancel ( msg >> f ) (map f shape)
+            PtrCancel (msg >> f) (map f shape)
 
         PtrStartAt msg shape ->
-            PtrStartAt (\ ptrTy pos -> msg ptrTy pos |> f ) (map f shape)
+            PtrStartAt (\ptrTy pos -> msg ptrTy pos |> f) (map f shape)
 
         PtrEndAt msg shape ->
-            PtrEndAt (\ ptrTy pos -> msg ptrTy pos |> f )  (map f shape)
+            PtrEndAt (\ptrTy pos -> msg ptrTy pos |> f)  (map f shape)
 
         PtrMoveAt msg shape ->
-            PtrMoveAt (\ ptrTy pos -> msg ptrTy pos |> f )  (map f shape)
+            PtrMoveAt (\ptrTy pos -> msg ptrTy pos |> f)  (map f shape)
 
         Group shapes ->
             Group (List.map (map f) shapes)
@@ -1806,13 +1806,13 @@ notifyPtrMoveAt msg shape =
 touchToPair : TouchPos -> ( Float, Float )
 touchToPair tp =
     case tp of
-        TouchPos x y ->
-            ( x, -y )
+        TouchPos x y -> 
+            flipY (x, y)
 
 flipY (x,y) = (x,-y)
 
 mousePosDecoder =
-    D.map2 (\x y -> ( x, -y )) (D.field "offsetX" D.float) (D.field "offsetY" D.float)
+    D.map2 (\x y -> flipY (x,y)) (D.field "offsetX" D.float) (D.field "offsetY" D.float)
 
 
 onTapAt : (( Float, Float ) -> userMsg) -> Html.Attribute userMsg
@@ -1889,8 +1889,6 @@ onPtrStart msg =
         Pointer.onWithOptions "pointerdown"
             { stopPropagation = True, preventDefault = True }
             ( \ event -> msg (myPtrType event.pointerType) )
-    --TODO remove comments Pointer.onDown ( \ _ -> msg )
-    --Html.Events.on "touchstart" (D.succeed msg)
 
 
 onPtrStartAt : (PtrType -> ( Float, Float ) -> userMsg) -> Html.Attribute userMsg
@@ -1898,9 +1896,6 @@ onPtrStartAt msg =
     Pointer.onWithOptions "pointerdown"
             { stopPropagation = True, preventDefault = True }
             ( \ event -> msg (myPtrType event.pointerType) (flipY event.pointer.pagePos) )
-    --Pointer.onDown ( \ event -> msg event.pointer.screenPos )
-    --Html.Events.on "touchstart"
-    --    (D.map (msg << touchToPair) touchDecoder)
 
 
 onPtrEndAt : (PtrType -> ( Float, Float ) -> userMsg) -> Html.Attribute userMsg
@@ -1908,9 +1903,6 @@ onPtrEndAt msg =
         Pointer.onWithOptions "pointerup"
             { stopPropagation = True, preventDefault = True }
             ( \ event -> msg (myPtrType event.pointerType) (flipY event.pointer.pagePos) )
-    --Pointer.onUp ( \ event -> msg event.pointer.screenPos )
-    --Html.Events.on "touchend"
-    --    (D.map (msg << touchToPair) touchDecoder)
 
 
 onPtrEnd : (PtrType -> userMsg) -> Html.Attribute userMsg
@@ -1918,30 +1910,19 @@ onPtrEnd msg =
     Pointer.onWithOptions "pointerup"
                 { stopPropagation = True, preventDefault = True }
                 ( \ event -> msg (myPtrType event.pointerType))
-    --[ Pointer.onUp ( \ _ -> msg )
-    --, Pointer.onCancel ( \ _ -> msg )
-    --]
-    --Html.Events.on "touchend" (D.succeed msg)
 
 onPtrCancel : (PtrType -> userMsg) -> Html.Attribute userMsg
 onPtrCancel msg =
     Pointer.onWithOptions "pointercancel"
                 { stopPropagation = True, preventDefault = True }
                 ( \ event -> msg (myPtrType event.pointerType))
-    --[ Pointer.onUp ( \ _ -> msg )
-    --, Pointer.onCancel ( \ _ -> msg )
-    --]
-    --Html.Events.on "touchend" (D.succeed msg)
 
 
 onPtrMove : (PtrType -> ( Float, Float ) -> userMsg) -> Html.Attribute userMsg
 onPtrMove msg =
         Pointer.onWithOptions "pointermove"
             { stopPropagation = True, preventDefault = True }
-            ( \ event -> msg (myPtrType event.pointerType) (flipY event.pointer.pagePos) )
-    --Pointer.onMove ( \ event -> msg event.pointer.screenPos )
-    --Html.Events.preventDefaultOn "touchmove"
-    --    (D.map (\a -> ( (msg << touchToPair) a, True )) touchDecoder)
+            (\event -> msg (myPtrType event.pointerType) (flipY event.pointer.pagePos))
 
 
 type TouchPos
