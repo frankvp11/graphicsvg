@@ -28,7 +28,7 @@ update msg model =
 view : Model -> Collage Msg
 view model = collage 192 128 
     [ rect 192 128 |> filled green
-        |> notifyMouseMoveAt GoTo
+        |> notifyPtrMoveAt (\_ pos -> GoTo pos)
     , circle 1 |> filled red |> move model
-        |> notifyMouseMoveAt GoTo
+        |> notifyPtrMoveAt (\_ pos -> GoTo pos)
     ]

@@ -13,7 +13,9 @@ module GraphicSVG exposing
     , text, size, bold, italic, underline, strikethrough, centered, alignLeft, alignRight, selectable, sansserif, serif, fixedwidth, customFont
     , move, rotate, scale, scaleX, scaleY, mirrorX, mirrorY, skewX, skewY
     , clip, union, subtract, outside, ghost
-    , notifyTap, notifyTapAt, notifyEnter, notifyEnterAt, notifyLeave, notifyLeaveAt, notifyMouseMoveAt, notifyMouseDown, notifyMouseDownAt, notifyMouseUp, notifyMouseUpAt, notifyTouchStart, notifyTouchStartAt, notifyTouchEnd, notifyTouchEndAt, notifyTouchMoveAt
+    , notifyTap, notifyTapAt, notifyEnter, notifyEnterAt, notifyLeave, notifyLeaveAt, notifyMouseMoveAt, notifyMouseDown, notifyMouseDownAt, notifyMouseUp, notifyMouseUpAt
+    , notifyTouchStart, notifyTouchStartAt, notifyTouchEnd, notifyTouchEndAt, notifyTouchMoveAt
+    , notifyPtrStart, notifyPtrStartAt, notifyPtrEnd, notifyPtrCancel, notifyPtrEndAt, notifyPtrMoveAt
     , makeTransparent, addHyperlink, puppetShow
     , graphPaper, graphPaperCustom, map
     , Gradient, gradient, radialGradient, Stop, stop, transparentStop, rotateGradient
@@ -143,6 +145,8 @@ Don't worry about these unless you *_really_* know what you're doing!
    Last updated: January 25th, 2019
 -}
 
+import Html.Events.Extra.Pointer as Pointer
+
 import Array
 import Browser exposing (UrlRequest)
 import Browser.Dom exposing (Viewport, getViewportOf)
@@ -153,6 +157,7 @@ import Dict
 import Html
 import Html.Attributes
 import Html.Events
+import Html.Events.Extra.Pointer as Ptr
 import Json.Decode as D exposing (..)
 import String exposing (..)
 import Svg exposing (Attribute)
@@ -174,8 +179,8 @@ import GraphicSVG.Secret
             , Pull(..)
             , Gradient(..)
             , Stop(..)
+            , PtrType(..)
             )
-
 
 {-| A filled, outlined, or filled and outlined object that can be drawn to the screen using `collage`.
 -}
@@ -276,6 +281,24 @@ map f sh =
 
         TouchMoveAt msg shape ->
             TouchMoveAt (f << msg) (map f shape)
+
+        PtrStart msg shape ->
+            PtrStart (msg >> f) (map f shape)
+
+        PtrEnd msg shape ->
+            PtrEnd (msg >> f) (map f shape)
+
+        PtrCancel msg shape ->
+            PtrCancel (msg >> f) (map f shape)
+
+        PtrStartAt msg shape ->
+            PtrStartAt (\ptrTy pos -> msg ptrTy pos |> f) (map f shape)
+
+        PtrEndAt msg shape ->
+            PtrEndAt (\ptrTy pos -> msg ptrTy pos |> f)  (map f shape)
+
+        PtrMoveAt msg shape ->
+            PtrMoveAt (\ptrTy pos -> msg ptrTy pos |> f)  (map f shape)
 
         Group shapes ->
             Group (List.map (map f) shapes)
@@ -1169,6 +1192,24 @@ curveHelper shape =
         TouchMoveAt userMsg sh ->
             TouchMoveAt userMsg (curveHelper sh)
 
+        PtrStart userMsg sh ->
+            PtrStart userMsg (curveHelper sh)
+
+        PtrEnd userMsg sh ->
+            PtrEnd userMsg (curveHelper sh)
+
+        PtrCancel userMsg sh ->
+            PtrCancel userMsg (curveHelper sh)
+
+        PtrStartAt userMsg sh ->
+            PtrStartAt userMsg (curveHelper sh)
+
+        PtrEndAt userMsg sh ->
+            PtrEndAt userMsg (curveHelper sh)
+
+        PtrMoveAt userMsg sh ->
+            PtrMoveAt userMsg (curveHelper sh)
+
         -- no changes for the rest...
         Inked clr ln sh ->
             Inked clr ln sh
@@ -1722,15 +1763,56 @@ notifyTouchMoveAt msg shape =
     TouchMoveAt msg shape
 
 
+{-| Receive a message (`userMsg`) when the user begins touching a `Shape`.
+-}
+notifyPtrStart : (PtrType -> userMsg) -> Shape userMsg -> Shape userMsg
+notifyPtrStart msg shape =
+    PtrStart msg shape
+
+{-| Receive a message (`userMsg`) with the x and y position of the user's finger when the user begins touching a `Shape`.
+-}
+notifyPtrStartAt : (PtrType -> ( Float, Float ) -> userMsg) -> Shape userMsg -> Shape userMsg
+notifyPtrStartAt msg shape =
+    PtrStartAt msg shape
+
+
+{-| Receive a message (`userMsg`) when the user lifts their finger off a `Shape`.
+-}
+notifyPtrEnd : (PtrType -> userMsg) -> Shape userMsg -> Shape userMsg
+notifyPtrEnd msg shape =
+    PtrEnd msg shape
+
+{-| Receive a message (`userMsg`) when the user lifts their finger off a `Shape`.
+-}
+notifyPtrCancel : (PtrType -> userMsg) -> Shape userMsg -> Shape userMsg
+notifyPtrCancel msg shape =
+    PtrCancel msg shape
+
+
+{-| Receive a message (`userMsg`) with the x and y position of the user's finger when the user lifts their finger off a `Shape`.
+-}
+notifyPtrEndAt : (PtrType -> ( Float, Float ) -> userMsg) -> Shape userMsg -> Shape userMsg
+notifyPtrEndAt msg shape =
+    PtrEndAt msg shape
+
+
+{-| Receive a message (`userMsg`) with the x and y position of the user's finger when the user moves their finger over a `Shape`.
+-}
+notifyPtrMoveAt : (PtrType -> ( Float, Float ) -> userMsg) -> Shape userMsg -> Shape userMsg
+notifyPtrMoveAt msg shape =
+    PtrMoveAt msg shape
+
+
 touchToPair : TouchPos -> ( Float, Float )
 touchToPair tp =
     case tp of
-        TouchPos x y ->
-            ( x, -y )
+        TouchPos x y -> 
+            flipY (x, y)
 
+flipY (x,y) = (x,-y)
 
 mousePosDecoder =
-    D.map2 (\x y -> ( x, -y )) (D.field "offsetX" D.float) (D.field "offsetY" D.float)
+    D.map2 (\x y -> flipY (x,y)) (D.field "offsetX" D.float) (D.field "offsetY" D.float)
 
 
 onTapAt : (( Float, Float ) -> userMsg) -> Html.Attribute userMsg
@@ -1768,7 +1850,6 @@ onMouseUpAt msg =
     Html.Events.on "mouseup"
         (D.map msg mousePosDecoder)
 
-
 onTouchStart : userMsg -> Html.Attribute userMsg
 onTouchStart msg =
     Html.Events.on "touchstart" (D.succeed msg)
@@ -1797,6 +1878,53 @@ onTouchMove msg =
         (D.map (\a -> ( (msg << touchToPair) a, True )) touchDecoder)
 
 
+myPtrType deviceType =
+    case deviceType of 
+        Pointer.MouseType -> MousePtr
+        Pointer.TouchType -> TouchPtr
+        Pointer.PenType   -> PenPtr
+
+onPtrStart : (PtrType -> userMsg) -> Html.Attribute userMsg
+onPtrStart msg =
+        Pointer.onWithOptions "pointerdown"
+            { stopPropagation = True, preventDefault = True }
+            ( \ event -> msg (myPtrType event.pointerType) )
+
+
+onPtrStartAt : (PtrType -> ( Float, Float ) -> userMsg) -> Html.Attribute userMsg
+onPtrStartAt msg =
+    Pointer.onWithOptions "pointerdown"
+            { stopPropagation = True, preventDefault = True }
+            ( \ event -> msg (myPtrType event.pointerType) (flipY event.pointer.pagePos) )
+
+
+onPtrEndAt : (PtrType -> ( Float, Float ) -> userMsg) -> Html.Attribute userMsg
+onPtrEndAt msg =
+        Pointer.onWithOptions "pointerup"
+            { stopPropagation = True, preventDefault = True }
+            ( \ event -> msg (myPtrType event.pointerType) (flipY event.pointer.pagePos) )
+
+
+onPtrEnd : (PtrType -> userMsg) -> Html.Attribute userMsg
+onPtrEnd msg =
+    Pointer.onWithOptions "pointerup"
+                { stopPropagation = True, preventDefault = True }
+                ( \ event -> msg (myPtrType event.pointerType))
+
+onPtrCancel : (PtrType -> userMsg) -> Html.Attribute userMsg
+onPtrCancel msg =
+    Pointer.onWithOptions "pointercancel"
+                { stopPropagation = True, preventDefault = True }
+                ( \ event -> msg (myPtrType event.pointerType))
+
+
+onPtrMove : (PtrType -> ( Float, Float ) -> userMsg) -> Html.Attribute userMsg
+onPtrMove msg =
+        Pointer.onWithOptions "pointermove"
+            { stopPropagation = True, preventDefault = True }
+            (\event -> msg (myPtrType event.pointerType) (flipY event.pointer.pagePos))
+
+
 type TouchPos
     = TouchPos Float Float
 
@@ -1823,6 +1951,10 @@ app or create a widget with GraphicSVG.Widget.
 -}
 createSVG : String -> Float -> Float -> Transform -> (a -> b) -> (((Float,Float) -> a) -> (Float,Float) -> b) -> Shape a -> Svg.Svg b
 createSVG id w h trans msgWrapper positionWrapper shape =
+  let
+    ptrWrapper msg = msg >> msgWrapper
+    ptrPosWrapper msg = \ ptr pos -> positionWrapper (msg ptr) pos
+  in
     case shape of
         Inked fillClr lt stencil ->
             let
@@ -2250,6 +2382,36 @@ createSVG id w h trans msgWrapper positionWrapper shape =
                 [ onTouchMove (positionWrapper msg) ]
                 [ createSVG id w h trans msgWrapper positionWrapper sh ]
 
+        PtrStart msg sh ->
+            Svg.g
+                [ onPtrStart (ptrWrapper msg) ]
+                [ createSVG id w h trans msgWrapper positionWrapper sh ]
+
+        PtrEnd msg sh ->
+            Svg.g
+                [ onPtrEnd (ptrWrapper msg) ]
+                [ createSVG id w h trans msgWrapper positionWrapper sh ]
+
+        PtrCancel msg sh ->
+            Svg.g
+                [ onPtrCancel (ptrWrapper msg) ]
+                [ createSVG id w h trans msgWrapper positionWrapper sh ]
+
+        PtrStartAt msg sh ->
+            Svg.g
+                [ onPtrStartAt (ptrPosWrapper msg) ]
+                [ createSVG id w h trans msgWrapper positionWrapper sh ]
+
+        PtrEndAt msg sh ->
+            Svg.g
+                [ onPtrStartAt (ptrPosWrapper msg) ]
+                [ createSVG id w h trans msgWrapper positionWrapper sh ]
+
+        PtrMoveAt msg sh ->
+            Svg.g
+                [ onPtrMove (ptrPosWrapper msg) ]
+                [ createSVG id w h trans msgWrapper positionWrapper sh ]
+
         Group shapes ->
             Svg.g [] <|
                 List.indexedMap
@@ -2413,6 +2575,24 @@ repaint color shape =
 
         TouchMoveAt userMsg sh ->
             TouchMoveAt userMsg (repaint color sh)
+
+        PtrStart userMsg sh ->
+            PtrStart userMsg (repaint color sh)
+
+        PtrEnd userMsg sh ->
+            PtrEnd userMsg (repaint color sh)
+
+        PtrCancel userMsg sh ->
+            PtrCancel userMsg (repaint color sh)
+
+        PtrStartAt userMsg sh ->
+            PtrStartAt userMsg (repaint color sh)
+
+        PtrEndAt userMsg sh ->
+            PtrEndAt userMsg (repaint color sh)
+
+        PtrMoveAt userMsg sh ->
+            PtrMoveAt userMsg (repaint color sh)
 
         -- no changes for the rest...
         ForeignObject w h htm ->
@@ -2676,6 +2856,24 @@ addOutline style outlineClr shape =
         TouchMoveAt userMsg sh ->
             TouchMoveAt userMsg (addOutline style outlineClr sh)
 
+        PtrStart userMsg sh ->
+            PtrStart userMsg (addOutline style outlineClr sh)
+
+        PtrEnd userMsg sh ->
+            PtrEnd userMsg (addOutline style outlineClr sh)
+
+        PtrCancel userMsg sh ->
+            PtrCancel userMsg (addOutline style outlineClr sh)
+
+        PtrStartAt userMsg sh ->
+            PtrStartAt userMsg (addOutline style outlineClr sh)
+
+        PtrEndAt userMsg sh ->
+            PtrEndAt userMsg (addOutline style outlineClr sh)
+
+        PtrMoveAt userMsg sh ->
+            PtrMoveAt userMsg (addOutline style outlineClr sh)
+
         -- no changes for the rest...
         ForeignObject w h htm ->
             ForeignObject w h htm
@@ -2813,6 +3011,24 @@ makeTransparent alpha shape =
 
         TouchMoveAt userMsg sh ->
             TouchMoveAt userMsg (makeTransparent alpha sh)
+
+        PtrStart userMsg sh ->
+            PtrStart userMsg (makeTransparent alpha sh)
+
+        PtrEnd userMsg sh ->
+            PtrEnd userMsg (makeTransparent alpha sh)
+
+        PtrCancel userMsg sh ->
+            PtrCancel userMsg (makeTransparent alpha sh)
+
+        PtrStartAt userMsg sh ->
+            PtrStartAt userMsg (makeTransparent alpha sh)
+
+        PtrEndAt userMsg sh ->
+            PtrEndAt userMsg (makeTransparent alpha sh)
+
+        PtrMoveAt userMsg sh ->
+            PtrMoveAt userMsg (makeTransparent alpha sh)
 
         GraphPaper s th (Solid colour) ->
             GraphPaper s th (Solid <| multAlpha colour alpha)

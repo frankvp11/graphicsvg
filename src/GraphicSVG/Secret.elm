@@ -1,5 +1,5 @@
 module GraphicSVG.Secret exposing 
-    (Stencil(..), Shape(..), Color(..), Gradient(..), Stop(..), Transform, LineType(..), FontAlign(..), Face(..), Font(..), Pull(..))
+    (Stencil(..), Shape(..), Color(..), Gradient(..), Stop(..), Transform, LineType(..), FontAlign(..), Face(..), Font(..), Pull(..), PtrType(..))
 
 {-| Advanced Secret module! This is for people who want to access the
 underlying types in the library so you can do advanced things. Most people
@@ -77,7 +77,15 @@ type Shape userMsg
     | TouchStartAt (( Float, Float ) -> userMsg) (Shape userMsg)
     | TouchEndAt (( Float, Float ) -> userMsg) (Shape userMsg)
     | TouchMoveAt (( Float, Float ) -> userMsg) (Shape userMsg)
+    | PtrStart ( PtrType -> userMsg ) (Shape userMsg)
+    | PtrEnd ( PtrType -> userMsg ) (Shape userMsg)
+    | PtrCancel ( PtrType -> userMsg ) (Shape userMsg)
+    | PtrStartAt (PtrType -> ( Float, Float ) -> userMsg) (Shape userMsg)
+    | PtrEndAt (PtrType -> ( Float, Float ) -> userMsg) (Shape userMsg)
+    | PtrMoveAt (PtrType -> ( Float, Float ) -> userMsg) (Shape userMsg)
     | GraphPaper Float Float Color
+
+type PtrType = MousePtr | TouchPtr | PenPtr
 
 {-| The `Color` type is used for filling or outlining a `Stencil`.
 -}
