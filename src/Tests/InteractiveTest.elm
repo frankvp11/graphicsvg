@@ -1,10 +1,11 @@
-module Main exposing (main)
+module Tests.InteractiveTest exposing (main)
 
 import Array
 import Bitwise
 import Browser.Events exposing (onKeyPress)
 import GraphicSVG exposing (..)
 import GraphicSVG.App exposing (GameApp, GetKeyState, KeyState(..), Keys(..), gameApp)
+import GraphicSVG.Secret exposing (Pull(..))
 import Html exposing (button)
 import Html.Attributes exposing (style)
 import Json.Decode as D
