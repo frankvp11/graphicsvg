@@ -96,7 +96,7 @@ type Shape userMsg
     - `PenPtr`   : A pen or stylus pointer device.
 
 This type can be used to distinguish between input sources for handling user interactions appropriately.
-Note that this unified pointer API might not be fully supported in all browsers
+Note that this unified pointer API might not be fully supported in all browsers.
 -}
 type PtrType = MousePtr | TouchPtr | PenPtr
 
